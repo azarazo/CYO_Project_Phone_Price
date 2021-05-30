@@ -1,0 +1,505 @@
+---
+title: "Decision Trees and Random Forests to Predict the Price Range of Mobile Phones"
+author: "Alejandro Zarazo"
+date: "30/5/2021"
+geometry: "left=3cm,right=3cm,top=2cm,bottom=2cm"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r mobile_library, echo = FALSE, results= 'hide', message=FALSE, warning=FALSE}
+options( warn = -1 )
+#Install missing required packages
+if(!require(lubridate)) install.packages("lubridate")
+if(!require(tidyverse)) install.packages("tidyverse")
+if(!require(caret)) install.packages("caret") 
+if(!require(readr)) install.packages("readr")
+if(!require(caret)) install.packages("caret")
+if(!require(data.table)) install.packages("data.table")
+if(!require(ggplot2)) install.packages("ggplot2")
+if(!require(GGally)) install.packages("GGally")
+if(!require(rpart)) install.packages("rpart")   #Decision Tree
+if(!require(rpart.plot))  ("rpart.plot")     #Decision Tree plot
+if(!require(dplyr)) install.packages("dplyr") 
+if(!require(ggthemes)) install.packages("ggthemes")
+if(!require(randomForest)) install.packages("randomForest")
+```
+
+# 1. General Description
+
+The dataset that will be used is available in any of the following addresses:
+
+https://www.kaggle.com/iabhishekofficial/mobile-price-classification/download 
+
+https://github.com/azarazo/CYO_Project_Phone_Price/blob/main/train.csv
+
+
+The data about mobile phones, registered in the mentioned dataset, will be used to estimate their price based on their characteristics. The fundamental idea is to know the relationship between the phones’ characteristics (e.g., internal memory, number of nuclei, size of the LCD display, etc.) to determine the selling price of the product, based on a segmentation or stratification of the potential clients, so each phone can be offered to each segment in a more efficient way. We have estimated a referential segmentation that includes prices:
+* Low
+* Medium
+* High 
+* Very High
+
+For this reason, the challenge will be to predict the price class as a function of the characteristics of each device. Therefore, this investigation is structured in the following way:
+ 
+First, the main idea of this work is presented. Second, a data preparation, conditioning and tidying process is carried out on the studied dataset. Third, an exploratory data analysis is performed to posteriorly propose and automatic learning algorithm that allows to make predictions that place a determined phone in its corresponding price segment, based on the available historical data. Finally, a discussion about the results is done and final observations and conclusions are presented.
+
+
+## 1.1. Introduction
+
+Segmenting the prices of specific products allows companies to categorize the type of client or user to whom the products can be offered, depending on the specifications and characteristics of those goods. Additionally, marketing and publicity campaigns can be carried out according to the objective client segment, what allows organizations to be more competitive and to better target the users bases depending on their specific needs, habits and expectations. 
+
+## 1.2. Objective of the Project
+
+As it has been previously stated, the objective of this data science project is to develop a Machine Learning algorithm capable of training, testing and applying the selected technique to predict the price range that will correspond to a specific mobile phone based on the device’s characteristics. For this purpose, we will use the provided data to assign the price segment using a validation dataset in the algorithm.
+Specific metrics will be used to evaluate the performance of the proposed algorithm, such as Root Mean Square Error (RMSE) and Precision. 
+
+# 2. Dataset
+
+The dataset to be used will be downloaded from the following link:
+
+https://github.com/drrueda/DataSets/archive/refs/heads/main.zip
+
+```{r, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Downloading and charging the dataset
+url <- "https://github.com/drrueda/DataSets/archive/refs/heads/main.zip"
+download.file(url,"temp.zip", mode="wb")
+unzip_result <- unzip("temp.zip", exdir = "data", overwrite = TRUE)
+mobile <- read.csv(unzip_result)
+```
+
+## Description of the data
+
+The following is a description of each variable composing the dataset:
+
+* battery_power: Total energy a battery can store in one time measured in mAh
+* blue: Has bluetooth or not
+* clock_speed: speed at which microprocessor executes instructions
+* dual_sim: Has dual sim support or not
+* fc: Front camera mega pixels
+* four_g: Has 4G or not
+* int_memory: Internal Memory in Gigabytes
+* m_dep: Mobile Depth in cm
+* mobile_wt: Weight of mobile phone
+* n_cores: Number of cores of processor
+* pc: Primary Camera mega pixels
+* px_height: Pixel Resolution Height
+* px_width: Pixel Resolution Width
+* ram: Random Access Memory in Megabytes
+* sc_h: Screen Height of mobile in cm
+* sc_w: Screen Width of mobile in cm
+* talk_time: longest time that a single battery charge will last when you are calling
+* three_g: Has 3G or not
+* touch_screen: Has touch screen or not
+* wifi: Has wifi or not
+
+* price_range: Range of price. This is the objective variable.
+
+
+The following is a preview of the dataset to better understand it:
+
+```{r mobile_data_head, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+#Display the head of the mobile dataset
+head(mobile,6)
+```
+
+# 3. Methods and Analysis
+
+
+# 3.1. Data Exploration, Cleaning and Visualization
+
+## 3.1.1. Exploration
+
+The structure of the data can be viewed here:
+
+```{r mobile_struct, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+#  To explore the variables
+glimpse(mobile)
+```
+
+There are variables that need to be adapted so that they can be used as input for the model. These variable are the following:
+
+<br>
+
+  1. *blue* :  is an integer and must be converted to factor <br>
+  2. *dual_sim* : is an integer and must be converted to factor <br>
+  3. *four_g* : is an integer and must be converted to factor <br>
+  4. *three_g* : is an integer and must be converted to factor <br>
+  5. *touch_screen* : is an integer and must be converted to factor <br>
+  6. *wifi* : is an integer and must be converted to factor <br>
+  7. *price_range* : is an integer and must be converted to factor, with leves **low cost**, **medium cost**, **high cost**, **very high cost**
+
+<br>
+
+Let's apply these transformations:
+```{r mobile_to_factor, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Transform the variables that are categorical
+mobile <- mobile %>%
+  mutate(
+    blue = as.factor(blue), 
+    dual_sim  = as.factor(dual_sim),
+    four_g = as.factor(four_g),
+    three_g = as.factor(three_g),
+    touch_screen = as.factor(touch_screen),
+    wifi = as.factor(wifi),
+    price_range = as.factor(price_range),
+    # Categorical values that the price variable can assume
+    price_range = sapply(price_range, 
+                         switch,"low cost","medium cost", 
+                         "high cost","very high cost"),
+    # Order in which the price range must appear
+    price_range = ordered(price_range,
+                          levels=c("low cost","medium cost", "high cost","very high cost"))
+  )
+# We see how the variables are after transforming to factor
+str(mobile) 
+```
+
+## 3.1.2. Data Tidying
+
+The presence of missing values will be determined.
+
+```{r mobile_nan, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE,results='asis'}
+# Missing values by column
+colSums(is.na(mobile)) 
+```
+<br>
+
+According to these results, there are no missing values.
+
+## 3.1.3. Visualization
+
+Let's review some aspects related to the characteristics of mobile phones.
+
+<br>
+
+Relation between price and RAM memory:
+
+```{r mobile_precio_ram, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Graph to see the relation of RAM memory vs Price
+ggplot(mobile, aes(price_range, ram)) + 
+  geom_point() +
+  geom_rug(size=0.1) +   
+  theme_set(theme_minimal(base_size = 18))+
+  ylab('RAM Memory of the Device')+
+  xlab('Price Segment')
+
+```
+<br>
+
+It can be seen that the amount of memory influences the price of phones.
+
+
+Percentage of phones with 4G support:
+
+```{r mobile_prop, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# We group and count if 4G support is included or not
+mobile %>% group_by(four_g) %>% summarise(freq=n()) %>% 
+  # Pie chart to determine the percentage of phones with 4G support 
+ggplot( aes(x="", y=freq, fill=four_g)) + 
+  geom_bar(stat="identity", width=1)+
+  coord_polar("y", start=0) + 
+   # We obtain the percentage
+  geom_text(aes(label = paste0(round((freq/sum(freq))*100), "%")),
+            position = position_stack(vjust = 0.5),color="white")+
+  # We apply color
+  scale_fill_manual(values=c("#FF0099","#0066FF"))+
+  # We include the legend
+  labs(x = NULL, y = NULL, 
+       fill = "0 = Without 4G Support / 1 = With 4G Support", title = "Percentage of 4G Support")+
+  theme_classic() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        axis.title=element_text(size=9,face="bold"), 
+        legend.position = "right"
+        )
+```
+
+Let's see the proportion of the price segments.
+
+```{r mobile_prop_precios, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# We group by price range
+mobile %>% group_by(price_range) %>% summarise(freq=n()) %>%
+  # We obtain the frequency by price
+ggplot( aes(x="", y=freq, fill=price_range)) +
+  geom_bar(stat="identity", width=1)+
+  coord_polar("y", start=0) + 
+  # We obtain the percentage by price
+  geom_text(aes(label = paste0(round((freq/sum(freq))*100), "%")),
+            position = position_stack(vjust = 0.5),color="white")+
+  scale_fill_manual(values=c("#FF0099", # We apply some color
+                             "#0066FF","#FF9900","#00FF66")) +
+  labs(x = NULL, y = NULL, fill = "Price Range", 
+       title = "Proportion Range/Price")+
+  theme_classic() + 
+  theme(axis.line = element_blank(),
+        axis.text = element_blank(),
+        axis.ticks = element_blank(),
+        plot.title = element_text(hjust = 0.5),
+        axis.title=element_text(size=9,face="bold"), 
+        legend.position = "right"
+        )
+```
+
+The proportion is balanced among the four different price segments.
+
+On the other hand, the correlation matrix is shown as follows:
+
+```{r mobile_corr, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+ggcorr(mobile,label = T, size=3, 
+       label_size = 3, hjust=0.95, 
+       # Color for the variables with the highest positive correlation
+       layout.exp = 3,low = "#0066FF",
+       high = "#FF9900")+ # Variables with lower correlation
+  labs(
+    title="Correlation Matrix"
+  )+
+  theme_minimal()+
+  theme(
+    plot.title = element_text(hjust = 0.5),
+    axis.title=element_text(size=8,face="bold"), 
+    axis.text.y=element_blank()
+  )
+
+```
+According to the correlation matrix, most variables are independent (not correlated) from each other. However, there are indeed some variables that are correlated, as it is the case of:
+
+<br>
+
+  * **sc_w** with respect to **sc_h** with a positive correlation of 0.5
+  * **px_width** with respect to **px_height** with a positive correlation of 0.5
+  * **fc** with respect to **pc** with a positive correlation of 0.6
+
+<br>
+
+# 3.2. Modeling Approaches
+
+Since this problem falls within the classification category, a model based on decision trees and random forests will be used.
+
+## 3.2.1. Decision Tree
+
+This is a quite successful model for this type of situations, since it allows predictors that are correlated to be numeric or categorical values. 
+
+An object for the model will be constructed based on decision trees. But first the dataset will be divided into a training set and a test (validation) set.
+
+The dplyr sample_frac() function will be used to obtain a subset of the original data, consisting of 70% of the total data. The function set.seed() will also be used to make this example reproducible. This is a common practice used to avoid overtraining Machine Learning models. Additionally, another function will be used, which permits to obtain samples from the dataset in a random, not continuous, way to avoid over adjusting or sub adjusting.
+
+Why was the 70%-30% split selected? Tests with 60%-40%, 80%-20%, 90%-10% splits have been carried out, but the distribution 70%-30% has proven to be the most efficient. Additionally, 70%-30% training-test splits are recommended as a good Machine Learning practice.
+
+```{r mobile_split, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+set.seed(1600) # To permit the reproduction of the results
+# 70% of the dataset for training (random sample). 
+# We avoid overtraining.
+x_train <-sample_frac(mobile,.7) 
+# 30% of the dataset for validation purposes
+x_test <- setdiff(mobile, x_train) 
+```
+
+With setdiff() of dplyr, a complementary data subset to the training one has been obtained, this one for the test set (the remaining 30%).
+
+```{r mobile_modelo_arbol, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# We create the model based on classification  trees
+arbol <- rpart(formula = price_range ~ ., data = x_train) 
+```
+
+The classification tree shows, in each node, the classification rule that is applied. The leaves of the tree correspond to the classification of the data. Additionally, interesting information can be displayed, such as the degree of importance of each variable, as it is presented as follows.
+
+
+```{r mobile_sumario, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# To show the importance of the variables used in the model
+sprintf("variable.importance = %s ",c(summary(arbol)$variable.importance));
+```
+
+Note that the variable that indicates the RAM memory seems to be the one with the highest importance in this model.
+
+The graphical representation of this tree is the following.
+
+```{r mobile_arbol_grafica, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Displays the graph of the created tree
+rpart.plot(arbol)
+```
+
+We know this must be finally done with the test set, but let’s apply this prediction to the training set to see how the model behaves for this sub dataset.
+
+```{r mobile_metricas_train, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE} 
+# Predict using the training set 
+# (IMPORTANT NOTE: these are predictions for the TRAINING SET)
+predict_train <- predict(arbol,x_train, type = "class")
+# We obtain the metrics
+cfm_train <- confusionMatrix(data =predict_train,
+                       reference =x_train$price_range)
+```
+
+```{r mobile_metricas_print, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Accuracy of the model (training set)
+sprintf('Accuracy = %10.2f',cfm_train$overall[1]*100) 
+```
+A precision of about $84$% is obtained for the training set.
+
+
+
+Now, the definitive test will be performed. Let’s see how this model does using the TEST SET that was previously created.
+
+```{r mobile_predic_arbol, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Prediction using decision tree
+prediccion <- predict(arbol, 
+                      newdata = x_test, type = "class")
+```
+
+We cross the predictions with the actual data of the test set to generate a confusion matrix.
+
+
+```{r mobile_metricas, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# We train our model
+cfm_arbol <- confusionMatrix(prediccion,x_test[["price_range"]])
+# Metrics of the model                             
+cfm_arbol$overall
+```
+
+Not bad. The precision (accuracy), Kappa and other statistics have quite acceptable values. According to these metrics, the model is capable of explaining $78$% of the price ranges.
+
+The confusion matrix for the test set is the following:
+
+```{r mobile_matriz_conf_test, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# We graph the confusion matrix
+ggplot(data = as.data.frame(cfm_arbol$table),
+       # Prediction vs actual values
+       aes(x = Reference, y = Prediction)) + 
+    geom_tile(aes(fill = log(Freq)), 
+              colour = "white") +
+    geom_text(aes(x = Reference, y = Prediction, 
+                  label = Freq),color="white") +
+    labs(
+      title =  'Confusion Matrix',
+      subtitle = 'Predictions using the Test Set',
+      x = "Actual Values",
+      y = "Predictions"
+    )+
+    theme_minimal()+
+    theme(
+          title = element_text(size=14),
+          axis.title=element_text(size=12, face="bold"),
+          axis.text.x=element_text(size=12),
+           axis.text.y=element_text(size=12),
+          legend.position = "none"
+          ) +
+     scale_colour_gradient2()
+```
+
+## 3.2.2. Random Forests
+
+Since the decision trees approach may tend to suffer from overfitting, a second technique will be used to address the studied problem. Now, a single tree will not be used, but a group of trees that work together to improve the performance of the initially proposed model.
+
+Similar as in the previous model, a *RandomForest* type object will be used. Again, a seed will be used so that the results can be reproduced. An important factor for this algorithm is to determine the number of trees to use because, the greater the number, the heavier the calculation process will be.
+
+Having carried out preliminary tests with a number of trees $100 \le N_{Trees} \le 500$ , we have opted for building a forest consisting of 300 trees.
+
+```{r mobile_rforest, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE,results='asis'}
+# To create the predictive model
+set.seed(2000)
+# We create the random forest model
+RF_model<-randomForest(price_range ~ ., data = x_train, importance=TRUE, ntree = 300)
+RF_model
+```
+
+According to the statistics of this model, the number of variables that are tested in each branch (or split) is 4, with an estimated rate of error close to $12.9$% for the training set.
+
+We will perform the test over the TEST SET.
+
+```{r mobile_predic_RF, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Prediction with the test set
+prediccion_RF <- predict(RF_model, newdata = x_test, type = "class")
+```
+
+The confusion matrix for the test set is the following:
+
+```{r mobile_matriz_conf_test_RF, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# We create the confusion matrix (estimated price range vs actual values)
+# Test set
+cfm_RF <- confusionMatrix(data = prediccion_RF,
+                       reference =x_test$price_range)
+ggplot(data = as.data.frame(cfm_RF$table),
+       aes(x = Reference, y = Prediction)) +
+    geom_tile(aes(fill = log(Freq)),
+              colour = "white") +
+    geom_text(aes(x = Reference, y = Prediction, 
+                  label = Freq),color="white") +
+    labs(
+      title =  'Confusion Matrix',
+      subtitle = 'Predictions for the Test Set',
+      x = "Actual Values",
+      y = "Predictions"
+    )+
+    theme_minimal()+
+    theme(
+          title = element_text(size=14),
+          axis.title=element_text(size=12, face="bold"),
+          axis.text.x=element_text(size=12),
+           axis.text.y=element_text(size=12),
+          legend.position = "none"
+          ) +
+     scale_colour_gradient2()
+```
+
+The precision of the model is about $88$%.
+
+```{r mobile_metricas_RF_test, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Precision of the RandomForest model (with the TEST SET)
+sprintf('Accuracy = %10.2f',cfm_RF$overall[1]*100) 
+```
+
+The model based on decision trees established a starting point for modeling the studied problem, which allows to confirm that, using random forests, the model’s performance is outstandingly improved. In general, both models are appropriate to solve this challenge. 
+
+
+# 4. Results and Discussion
+
+Two approaches have been proposed to solve the problem of determining the price range or segment for specific mobile phones, based on their characteristics and considering historical data.
+
+The model based on decision trees provides an accuracy of around $78$%, which is an acceptable result, but which can also be substantially improved.
+
+Looking to improve the results obtained by the decision trees approach, a model based on random forests was implemented. The random forest model outdid the decision trees model, by obtaining an accuracy of about $88$%, almost $10$ percentage points higher. These results are displayed in the graph that follows:
+
+```{r mobile_acc, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# We create a table with the statistics Accuracy/Kappa
+acc<-data.frame(
+    "Accuracy"= c(round((cfm_arbol$overall[1])*100,2),round((cfm_RF$overall[1])*100,2)),
+    "Kappa" = c(round((cfm_RF$overall[2])*100,2),round((cfm_RF$overall[2])*100,2))
+    )
+```
+
+```{r mobile_grafica_acc_two, echo = TRUE, message = FALSE, warning = FALSE, eval = TRUE}
+# Graph of the precision percentage of the two used models
+qplot(c('Dec. Tree','Random Forest'), acc$Accuracy,main = 'Accuracy: Decision Tree vs Random Forest',
+      ylab = 'Accuracy',xlab = 'Models Used',color = I("red"),size= I(2))
+```
+
+# 5. Conclusions
+
+Two classification models have been developed and applied to assign a price range to mobile phones based on their main technical and functional characteristics.
+
+According to the analysis performed throughout this project, the model based on *Random Forests* has the best performance in predicting the price range of mobile phones.
+
+The Random Forest model creates multiple trees on the data subset and combines the output of all the trees, reducing, in this way, the overfitting problem that decision trees have. Random Forest also reduces the variance, therefore improving accuracy.
+
+The main limitation of the Random Forest approach is that the inclusion of a large number of trees can make the algorithm substantially slow and ineffective for real-time prediction purposes. This type of algorithms is generally fast to train but are slow to create predictions once they have been trained.
+
+To speed computations, the number of estimators should be lowered. To increase the accuracy of the model, the number of trees should be increased. Specify the maximum number of features to be considered at each node/branch split; increasing tree size would increase the accuracy.
+
+Finally, it must be noted that, even though seed values have been used for reproducibility purposes, it is probable that results vary when running the code, due to factors (random in nature) that are intrinsic to the methods and functions used. Therefore, new executions may display slightly different results.
+
+\pagebreak
+
+# 6. Appendix - Operating System Used
+
+```{r}
+print("SO:")
+version
+```
